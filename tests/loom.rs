@@ -14,15 +14,31 @@ static BRANCHES_USED: [AtomicBool; BRANCHES_COUNT] = [ATOMIC_BOOL_INIT; BRANCHES
 
 const STATIC_INIT: u32 = 0;
 
+struct Dropper<T> {
+    ptr: *mut T,
+}
+
+impl<T> Drop for Dropper<T> {
+    fn drop(&mut self) {
+        drop(unsafe { Box::from_raw(self.ptr) })
+    }
+}
+
+impl<T: 'static> Dropper<T> {
+    unsafe fn new(ptr: *mut T) -> Self {
+        Self { ptr }
+    }
+}
+
 #[test]
 fn loom_refswap() {
     loom::model(|| {
         // thread closures must be 'static
-        let r = Box::leak(Box::new(RefSwap::new(&STATIC_INIT)));
-        let dropper = unsafe { Box::from_raw(r as _) };
+        let r = Box::into_raw(Box::new(RefSwap::new(&STATIC_INIT)));
+        let dropper = unsafe { Dropper::new(r) };
 
-        let handle1 = thread::spawn(|| first_thread(r));
-        let handle2 = thread::spawn(|| second_thread(r));
+        let handle1 = thread::spawn(move || first_thread(unsafe { &*r }));
+        let handle2 = thread::spawn(move || second_thread(unsafe { &*r }));
         let res1 = handle1.join();
         let res2 = handle2.join();
 
@@ -38,8 +54,8 @@ fn loom_refswap() {
     }
 }
 
-fn first_thread(r: &RefSwap<'static, u32>) {
-    match dbg!(r.load(Relaxed)) {
+fn first_thread(r: &RefSwap<'_, u32>) {
+    match r.load(Relaxed) {
         0 => {
             BRANCHES_USED[0].store(true, Relaxed);
             return;
@@ -50,7 +66,7 @@ fn first_thread(r: &RefSwap<'static, u32>) {
     }
 }
 
-fn second_thread(r: &RefSwap<'static, u32>) {
+fn second_thread(r: &RefSwap<'_, u32>) {
     static ONE: u32 = 1;
     static OTHER_ONE: u32 = 1;
     r.store(&ONE, Relaxed);
@@ -71,11 +87,11 @@ const OPTION_STATIC_INIT: Option<&u32> = None;
 fn loom_optionrefswap() {
     loom::model(|| {
         // thread closures must be 'static
-        let r = Box::leak(Box::new(OptionRefSwap::new(OPTION_STATIC_INIT)));
-        let dropper = unsafe { Box::from_raw(r as _) };
+        let r = Box::into_raw(Box::new(OptionRefSwap::new(OPTION_STATIC_INIT)));
+        let dropper = unsafe { Dropper::new(r) };
 
-        let handle1 = thread::spawn(|| option_first_thread(r));
-        let handle2 = thread::spawn(|| option_second_thread(r));
+        let handle1 = thread::spawn(move || option_first_thread(unsafe { &*r }));
+        let handle2 = thread::spawn(move || option_second_thread(unsafe { &*r }));
         let res1 = handle1.join();
         let res2 = handle2.join();
 
@@ -91,8 +107,8 @@ fn loom_optionrefswap() {
     }
 }
 
-fn option_first_thread(r: &OptionRefSwap<'static, u32>) {
-    match dbg!(r.load(Relaxed)) {
+fn option_first_thread(r: &OptionRefSwap<'_, u32>) {
+    match r.load(Relaxed) {
         None => {
             OPTIONS_BRANCHES_USED[0].store(true, Relaxed);
             return;
@@ -103,7 +119,7 @@ fn option_first_thread(r: &OptionRefSwap<'static, u32>) {
     }
 }
 
-fn option_second_thread(r: &OptionRefSwap<'static, u32>) {
+fn option_second_thread(r: &OptionRefSwap<'_, u32>) {
     static ONE: u32 = 1;
     static OTHER_ONE: u32 = 1;
     r.store(Some(&ONE), Relaxed);
