@@ -60,10 +60,7 @@ fn loom_refswap() {
 
 fn first_thread(r: &RefSwap<'_, AtomicU32>) {
     match r.load(Relaxed).load(Relaxed) {
-        0 => {
-            BRANCHES_USED[0].store(true, Relaxed);
-            return;
-        }
+        0 => BRANCHES_USED[0].store(true, Relaxed),
         // This should not be reachable. Assuming that the below value.store(2, Relaxed) is a
         // non-atomic mutation, it *must* be observed otherwise a wrong state could be observed
         1 => unreachable!(
@@ -77,5 +74,5 @@ fn first_thread(r: &RefSwap<'_, AtomicU32>) {
 fn second_thread<'a>(r: &RefSwap<'a, AtomicU32>, value: &'a AtomicU32) {
     // Assuming this is a non-atomic write. But this is done manually so that loom is "aware" of this mutation and can reorder its observation.
     value.store(2, Relaxed);
-    r.store(&value, Relaxed);
+    r.store(value, Relaxed);
 }
