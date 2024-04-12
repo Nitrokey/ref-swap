@@ -56,10 +56,7 @@ fn loom_refswap() {
 
 fn first_thread(r: &RefSwap<'_, u32>) {
     match r.load(Relaxed) {
-        0 => {
-            BRANCHES_USED[0].store(true, Relaxed);
-            return;
-        }
+        0 => BRANCHES_USED[0].store(true, Relaxed),
         1 => BRANCHES_USED[1].store(true, Relaxed),
         2 => BRANCHES_USED[2].store(true, Relaxed),
         _ => panic!(),
@@ -109,10 +106,7 @@ fn loom_optionrefswap() {
 
 fn option_first_thread(r: &OptionRefSwap<'_, u32>) {
     match r.load(Relaxed) {
-        None => {
-            OPTIONS_BRANCHES_USED[0].store(true, Relaxed);
-            return;
-        }
+        None => OPTIONS_BRANCHES_USED[0].store(true, Relaxed),
         Some(1) => OPTIONS_BRANCHES_USED[1].store(true, Relaxed),
         Some(2) => OPTIONS_BRANCHES_USED[2].store(true, Relaxed),
         _ => panic!(),

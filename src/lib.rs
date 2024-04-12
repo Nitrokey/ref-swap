@@ -419,7 +419,7 @@ mod tests {
         thread::scope(|s| {
             s.spawn(move || {
                 *thread_2_value = 2;
-                r.store(&thread_2_value, Relaxed);
+                r.store(thread_2_value, Relaxed);
             });
 
             s.spawn(|| {
