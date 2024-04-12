@@ -391,6 +391,7 @@ impl<'a, T> OptionRefSwap<'a, T> {
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
 
     #[allow(unused)]
@@ -402,5 +403,34 @@ mod tests {
         let r = OptionRefSwap::new(b);
         let stat: Option<&'static u32> = Some(&123);
         r.store(b, Ordering::Relaxed);
+    }
+
+    // With miri enabled, this tests for the bug described in a5145bc9bc22ae9db310af8a8e5ddab1125d1f4a
+    #[test]
+    fn miri_test() {
+        use std::sync::atomic::Ordering::Relaxed;
+        use std::thread::{self, sleep};
+        use std::time::Duration;
+
+        let thread_2_value = &mut 1;
+        let init = 0;
+        let r = RefSwap::new(&init);
+        let r = &r;
+        thread::scope(|s| {
+            s.spawn(move || {
+                *thread_2_value = 2;
+                r.store(&thread_2_value, Relaxed);
+            });
+
+            s.spawn(|| {
+                sleep(Duration::from_millis(1));
+                match r.load(Relaxed) {
+                    0 => panic!("Not the branch we are interested in"),
+                    1 => panic!("Unsynchronised mutation"),
+                    2 => {}
+                    _ => unreachable!(),
+                }
+            });
+        });
     }
 }
