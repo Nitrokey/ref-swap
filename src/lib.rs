@@ -1,13 +1,16 @@
 // Copyright (C) 2022 Nitrokey GmbH
 // SPDX-License-Identifier: Apache-2.0 or MIT
 
-#![cfg_attr(not(test), no_std)]
+#![cfg_attr(not(any(test, loom)), no_std)]
 #![doc = include_str!("../README.md")]
 
-use core::{
-    marker::PhantomData,
-    sync::atomic::{AtomicPtr, Ordering},
-};
+use core::{marker::PhantomData, sync::atomic::Ordering};
+
+#[cfg(loom)]
+use loom::sync::atomic::AtomicPtr;
+
+#[cfg(not(loom))]
+use core::sync::atomic::AtomicPtr;
 
 /// Relaxed operations can lead to race conditions:
 ///
@@ -61,7 +64,17 @@ pub struct RefSwap<'a, T> {
 }
 
 impl<'a, T> RefSwap<'a, T> {
+    #[cfg(not(loom))]
     pub const fn new(data: &'a T) -> Self {
+        Self {
+            ptr: AtomicPtr::new(data as *const _ as *mut _),
+            phantom: PhantomData,
+        }
+    }
+
+    // non-const version for loom
+    #[cfg(loom)]
+    pub fn new(data: &'a T) -> Self {
         Self {
             ptr: AtomicPtr::new(data as *const _ as *mut _),
             phantom: PhantomData,
@@ -140,6 +153,7 @@ impl<'a, T> RefSwap<'a, T> {
     /// Get a mutable reference to the current stored reference.
     ///
     /// This is safe because the mutable reference guarantees that no other threads are concurrently accessing the atomic data.
+    #[cfg(not(loom))]
     pub fn get_mut<'s>(&'s mut self) -> &'s mut &'a T {
         let res: &'s mut *mut T = self.ptr.get_mut();
         unsafe { &mut *(res as *mut *mut T as *mut &'a T) }
@@ -148,6 +162,7 @@ impl<'a, T> RefSwap<'a, T> {
     /// Consumes the atomic and returns the contained value.
     ///
     /// This is safe because passing `self` by value guarantees that no other threads are concurrently accessing the atomic data.
+    #[cfg(not(loom))]
     pub fn into_inner(self) -> &'a T {
         let res = self.ptr.into_inner();
         unsafe { &*res }
@@ -197,7 +212,18 @@ pub struct OptionRefSwap<'a, T> {
 }
 
 /// Returns a null pointer if `ptr` is None, otherwise returns the the pointer corresponding to the reference
+#[cfg(not(loom))]
 const fn opt_to_ptr<T>(ptr: Option<&T>) -> *mut T {
+    match ptr {
+        Some(r) => r as *const _ as *mut _,
+        None => core::ptr::null_mut(),
+    }
+}
+
+// non-const version for loom
+/// Returns a null pointer if `ptr` is None, otherwise returns the the pointer corresponding to the reference
+#[cfg(loom)]
+fn opt_to_ptr<T>(ptr: Option<&T>) -> *mut T {
     match ptr {
         Some(r) => r as *const _ as *mut _,
         None => core::ptr::null_mut(),
@@ -215,7 +241,17 @@ unsafe fn ptr_to_opt<'a, T>(ptr: *mut T) -> Option<&'a T> {
 }
 
 impl<'a, T> OptionRefSwap<'a, T> {
+    #[cfg(not(loom))]
     pub const fn new(data: Option<&'a T>) -> Self {
+        Self {
+            ptr: AtomicPtr::new(opt_to_ptr(data)),
+            phantom: PhantomData,
+        }
+    }
+
+    // Non const version for loom
+    #[cfg(loom)]
+    pub fn new(data: Option<&'a T>) -> Self {
         Self {
             ptr: AtomicPtr::new(opt_to_ptr(data)),
             phantom: PhantomData,
@@ -298,6 +334,7 @@ impl<'a, T> OptionRefSwap<'a, T> {
     ///
     /// This is safe because the mutable reference guarantees that no other threads are concurrently accessing the atomic data.
     #[allow(unused)]
+    #[cfg(not(loom))]
     fn get_mut<'s>(&'s mut self) -> &'s mut Option<&'a T> {
         let res: &'s mut *mut T = self.ptr.get_mut();
 
@@ -309,6 +346,7 @@ impl<'a, T> OptionRefSwap<'a, T> {
     /// Consumes the atomic and returns the contained value.
     ///
     /// This is safe because passing `self` by value guarantees that no other threads are concurrently accessing the atomic data.
+    #[cfg(not(loom))]
     pub fn into_inner(self) -> &'a T {
         let res = self.ptr.into_inner();
         unsafe { &*res }
@@ -356,7 +394,7 @@ mod tests {
     use super::*;
 
     #[allow(unused)]
-    fn variance<'a, 'b>(a: &'a u32, b: Option<&'b u32>) {
+    fn variance(a: &u32, b: Option<&u32>) {
         let r = RefSwap::new(a);
         let stat: &'static u32 = &123;
         r.store(stat, Ordering::Relaxed);
