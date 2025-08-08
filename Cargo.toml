@@ -14,7 +14,7 @@ license = "Apache-2.0 OR MIT"
 readme = "README.md"
 
 [target.'cfg(loom)'.dependencies]
-loom = "0.5"
+loom = "0.7"
 
 [profile.dev.package.loom]
 opt-level = 2
