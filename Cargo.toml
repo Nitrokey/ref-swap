@@ -18,3 +18,6 @@ loom = "0.5"
 
 [profile.dev.package.loom]
 opt-level = 2
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(loom)'] }
