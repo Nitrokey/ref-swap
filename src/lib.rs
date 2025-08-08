@@ -392,6 +392,8 @@ impl<'a, T> OptionRefSwap<'a, T> {
 #[cfg(test)]
 mod tests {
 
+    use core::sync::atomic::AtomicBool;
+
     use super::*;
 
     #[allow(unused)]
@@ -409,28 +411,42 @@ mod tests {
     #[test]
     fn miri_test() {
         use std::sync::atomic::Ordering::Relaxed;
-        use std::thread::{self, sleep};
-        use std::time::Duration;
+        use std::thread;
 
-        let thread_2_value = &mut 1;
-        let init = 0;
-        let r = RefSwap::new(&init);
-        let r = &r;
-        thread::scope(|s| {
-            s.spawn(move || {
-                *thread_2_value = 2;
-                r.store(thread_2_value, Relaxed);
-            });
+        let previous = AtomicBool::new(false);
+        let next = AtomicBool::new(false);
 
-            s.spawn(|| {
-                sleep(Duration::from_millis(1));
-                match r.load(Relaxed) {
-                    0 => panic!("Not the branch we are interested in"),
-                    1 => panic!("Unsynchronised mutation"),
-                    2 => {}
-                    _ => unreachable!(),
-                }
+        for _ in 0..100 {
+            if previous.load(Relaxed) && next.load(Relaxed) {
+                // Both interesting branches have been explored successfully
+                return;
+            }
+
+            let thread_2_value = &mut 1;
+            let init = 0;
+            let r = RefSwap::new(&init);
+            let r = &r;
+            thread::scope(|s| {
+                s.spawn(move || {
+                    *thread_2_value = 2;
+                    r.store(thread_2_value, Relaxed);
+                });
+
+                s.spawn(|| {
+                    match r.load(Relaxed) {
+                        // Undisired branch
+                        0 => previous.store(true, Relaxed),
+                        1 => panic!("Unsynchronised mutation"),
+                        2 => next.store(true, Relaxed),
+                        _ => unreachable!(),
+                    }
+                });
             });
-        });
+        }
+        panic!(
+            "Never got the desired branch: {} {}",
+            previous.load(Relaxed),
+            next.load(Relaxed)
+        );
     }
 }
