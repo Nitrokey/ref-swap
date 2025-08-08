@@ -10,8 +10,7 @@ Safe wrapper around [`AtomicPtr`](https://doc.rust-lang.org/core/sync/atomic/str
 Instead of swapping a pointer, it works with references and lifetimes, allowing a safe API.
 Two versions are provided:
 - [`RefSwap`](https://docs.rs/ref-swap/latest/ref_swap/struct.RefSwap.html) for swapping references
-- [`OptionRefSwap`](https://docs.rs/ref-swap/latest/ref_swap/struct.OptionRefSwap.html) for swapping `Option<&T>`.
-[`OptionRefSwap`](https://docs.rs/ref-swap/latest/ref_swap/struct.OptionRefSwap.html) encodes `None` as a null pointer and has no additionnal overhead.
+- [`OptionRefSwap`](https://docs.rs/ref-swap/latest/ref_swap/struct.OptionRefSwap.html) for swapping `Option<&T>`. It encodes `None` as a null pointer and has no additionnal overhead.
 
 With references
 ---------------
