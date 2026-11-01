@@ -14,11 +14,19 @@ license = "Apache-2.0 OR MIT"
 readme = "README.md"
 rust-version = "1.56"
 
+
+[dependencies]
+portable-atomic = { version = "1", optional = true, default-features = false }
+
 [target.'cfg(loom)'.dependencies]
 loom = "0.7"
+
+[features]
+portable-atomic = ["dep:portable-atomic"]
 
 [profile.dev.package.loom]
 opt-level = 2
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(loom)'] }
+
