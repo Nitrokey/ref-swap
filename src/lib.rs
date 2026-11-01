@@ -4,10 +4,12 @@
 #![cfg_attr(not(test), no_std)]
 #![doc = include_str!("../README.md")]
 
-use core::{
-    marker::PhantomData,
-    sync::atomic::{AtomicPtr, Ordering},
-};
+use core::{marker::PhantomData, sync::atomic::Ordering};
+
+#[cfg(not(feature = "portable-atomic"))]
+use core::sync::atomic::AtomicPtr;
+#[cfg(feature = "portable-atomic")]
+use portable_atomic::AtomicPtr;
 
 /// Relaxed operations can lead to race conditions:
 ///
@@ -77,12 +79,15 @@ impl<'a, T> RefSwap<'a, T> {
     /// For more information on the orderings, se the documentation of [`AtomicPtr::compare_and_swap`](core::sync::atomic::AtomicPtr::compare_and_swap)
     #[deprecated(note = "Use `compare_exchange` or `compare_exchange_weak` instead")]
     pub fn compare_and_swap(&self, current: &'a T, new: &'a T, order: Ordering) -> &'a T {
-        #[allow(deprecated)]
-        let ptr = self.ptr.compare_and_swap(
-            current as *const _ as *mut _,
-            new as *const _ as *mut _,
-            load_store(order),
-        );
+        let ptr = self
+            .ptr
+            .compare_exchange(
+                current as *const _ as *mut _,
+                new as *const _ as *mut _,
+                load_store(order),
+                load(order),
+            )
+            .unwrap_or_else(|previous| previous);
 
         unsafe { &*ptr }
     }
@@ -236,10 +241,15 @@ impl<'a, T> OptionRefSwap<'a, T> {
         new: Option<&'a T>,
         order: Ordering,
     ) -> Option<&'a T> {
-        #[allow(deprecated)]
-        let ptr =
-            self.ptr
-                .compare_and_swap(opt_to_ptr(current), opt_to_ptr(new), load_store(order));
+        let ptr = self
+            .ptr
+            .compare_exchange(
+                opt_to_ptr(current),
+                opt_to_ptr(new),
+                load_store(order),
+                load(order),
+            )
+            .unwrap_or_else(|previous| previous);
 
         unsafe { ptr_to_opt(ptr) }
     }
