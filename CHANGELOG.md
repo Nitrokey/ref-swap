@@ -7,7 +7,7 @@ SPDX-License-Identifier: CC0-1.0
 
 ## Unreleased
 
--
+- Add optional `portable-atomic` feature
 
 ## [v0.1.4][] (2026-11-16)
 

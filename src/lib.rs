@@ -9,8 +9,15 @@ use core::{cell::UnsafeCell, marker::PhantomData, panic::RefUnwindSafe, sync::at
 #[cfg(loom)]
 use loom::sync::atomic::AtomicPtr;
 
-#[cfg(not(loom))]
+#[cfg(all(not(loom), not(feature = "portable-atomic")))]
 use core::sync::atomic::AtomicPtr;
+
+#[cfg(all(not(loom), feature = "portable-atomic"))]
+use portable_atomic::AtomicPtr;
+
+// Silence unused_depencies warning
+#[cfg(all(loom, feature = "portable-atomic"))]
+use portable_atomic as _;
 
 /// Relaxed operations can lead to race conditions:
 ///
@@ -93,11 +100,15 @@ impl<'a, T> RefSwap<'a, T> {
     #[deprecated(note = "Use `compare_exchange` or `compare_exchange_weak` instead")]
     pub fn compare_and_swap(&self, current: &'a T, new: &'a T, order: Ordering) -> &'a T {
         #[allow(deprecated)]
-        let ptr = self.ptr.compare_and_swap(
-            current as *const _ as *mut _,
-            new as *const _ as *mut _,
-            load_store(order),
-        );
+        let ptr = self
+            .ptr
+            .compare_exchange(
+                current as *const _ as *mut _,
+                new as *const _ as *mut _,
+                load_store(order),
+                load(order),
+            )
+            .unwrap_or_else(|previous| previous);
 
         unsafe { &*ptr }
     }
@@ -290,9 +301,15 @@ impl<'a, T> OptionRefSwap<'a, T> {
         order: Ordering,
     ) -> Option<&'a T> {
         #[allow(deprecated)]
-        let ptr =
-            self.ptr
-                .compare_and_swap(opt_to_ptr(current), opt_to_ptr(new), load_store(order));
+        let ptr = self
+            .ptr
+            .compare_exchange(
+                opt_to_ptr(current),
+                opt_to_ptr(new),
+                load_store(order),
+                load(order),
+            )
+            .unwrap_or_else(|previous| previous);
 
         unsafe { ptr_to_opt(ptr) }
     }

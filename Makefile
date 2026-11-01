@@ -4,11 +4,13 @@
 .PHONY: test
 test:
 	cargo test
+	cargo test --features portable-atomic
 	RUSTFLAGS='$(RUSTFLAGS) --cfg loom' cargo test loom
 
 .PHONY: test-miri
 test-miri:
 	cargo +nightly miri test
+	cargo +nightly miri test --features portable-atomic
 
 .PHONY: check
 check:
@@ -17,6 +19,7 @@ check:
 
 .PHONY: lint
 lint:
+	cargo clippy --all-targets
 	cargo clippy --all-targets --all-features
 	cargo doc --all-features --no-deps
 	cargo fmt --check
