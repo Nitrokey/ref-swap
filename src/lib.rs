@@ -362,9 +362,13 @@ impl<'a, T> OptionRefSwap<'a, T> {
     ///
     /// This is safe because passing `self` by value guarantees that no other threads are concurrently accessing the atomic data.
     #[cfg(not(loom))]
-    pub fn into_inner(self) -> &'a T {
+    pub fn into_inner(self) -> Option<&'a T> {
         let res = self.ptr.into_inner();
-        unsafe { &*res }
+        if res.is_null() {
+            None
+        } else {
+            unsafe { Some(&*res) }
+        }
     }
 
     /// An alias for [`OptionRefSwap::try_update`]()
@@ -427,6 +431,14 @@ impl<'a, T> OptionRefSwap<'a, T> {
 ///     shrink(&r).store(&s, Relaxed);
 /// }
 /// let dangling: &'static String = r.load(Relaxed); // use-after-free
+/// ```
+///
+/// # Test into_inner without null check
+/// ```rust,compile_fail
+/// use ref_swap::OptionRefSwap;
+///
+/// let r: OptionRefSwap<'static, u32> = OptionRefSwap::new(None);
+/// let x: &u32 = r.into_inner(); // null reference
 /// ```
 fn _compile_fail_tests() {}
 
