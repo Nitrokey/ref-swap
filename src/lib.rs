@@ -168,17 +168,28 @@ impl<'a, T> RefSwap<'a, T> {
         unsafe { &*res }
     }
 
+    /// An alias for [`RefSwap::try_update`]()
+    #[deprecated(note = "renamed to `try_update`for consistency")]
+    pub fn fetch_update<F: FnMut(&'a T) -> Option<&'a T>>(
+        &self,
+        set_order: Ordering,
+        fetch_order: Ordering,
+        f: F,
+    ) -> Result<&'a T, &'a T> {
+        self.try_update(set_order, fetch_order, f)
+    }
+
     /// Fetches the value, and applies a function to it that returns an optional new value. `Returns` a `Result` of `Ok(previous_value)` if the function returned `Some(_)`, else `Err(previous_value)`.
     ///
-    /// For more information on the orderings, se the documentation of [`AtomicPtr::fetch_update`](core::sync::atomic::AtomicPtr::fetch_update)
-    pub fn fetch_update<F: FnMut(&'a T) -> Option<&'a T>>(
+    /// For more information on the orderings, se the documentation of [`AtomicPtr::try_update`](core::sync::atomic::AtomicPtr::try_update)
+    pub fn try_update<F: FnMut(&'a T) -> Option<&'a T>>(
         &self,
         set_order: Ordering,
         fetch_order: Ordering,
         mut f: F,
     ) -> Result<&'a T, &'a T> {
         self.ptr
-            .fetch_update(load_store(set_order), load(fetch_order), |ptr| {
+            .try_update(load_store(set_order), load(fetch_order), |ptr| {
                 f(unsafe { &*ptr }).map(|r| r as *const _ as *mut _)
             })
             .map(|ptr| unsafe { &*ptr })
@@ -352,17 +363,28 @@ impl<'a, T> OptionRefSwap<'a, T> {
         unsafe { &*res }
     }
 
+    /// An alias for [`OptionRefSwap::try_update`]()
+    #[deprecated(note = "renamed to `try_update`for consistency")]
+    pub fn fetch_update<F: FnMut(Option<&'a T>) -> Option<Option<&'a T>>>(
+        &self,
+        set_order: Ordering,
+        fetch_order: Ordering,
+        f: F,
+    ) -> Result<Option<&'a T>, Option<&'a T>> {
+        self.try_update(set_order, fetch_order, f)
+    }
+
     /// Fetches the value, and applies a function to it that returns an optional new value. `Returns` a `Result` of `Ok(previous_value)` if the function returned `Some(_)`, else `Err(previous_value)`.
     ///
-    /// For more information on the orderings, se the documentation of [`AtomicPtr::fetch_update`](core::sync::atomic::AtomicPtr::fetch_update)
-    pub fn fetch_update<F: FnMut(Option<&'a T>) -> Option<Option<&'a T>>>(
+    /// For more information on the orderings, se the documentation of [`AtomicPtr::try_update`](core::sync::atomic::AtomicPtr::try_update)
+    pub fn try_update<F: FnMut(Option<&'a T>) -> Option<Option<&'a T>>>(
         &self,
         set_order: Ordering,
         fetch_order: Ordering,
         mut f: F,
     ) -> Result<Option<&'a T>, Option<&'a T>> {
         self.ptr
-            .fetch_update(load_store(set_order), load(fetch_order), |ptr| {
+            .try_update(load_store(set_order), load(fetch_order), |ptr| {
                 f(unsafe { ptr_to_opt(ptr) }).map(opt_to_ptr)
             })
             .map(|ptr| unsafe { ptr_to_opt(ptr) })
@@ -392,6 +414,7 @@ impl<'a, T> OptionRefSwap<'a, T> {
 #[cfg(test)]
 mod tests {
 
+    #[cfg(miri)]
     use core::sync::atomic::AtomicBool;
 
     use super::*;
@@ -409,6 +432,7 @@ mod tests {
 
     // With miri enabled, this tests for the bug described in a5145bc9bc22ae9db310af8a8e5ddab1125d1f4a
     #[test]
+    #[cfg(miri)]
     fn miri_test() {
         use std::sync::atomic::Ordering::Relaxed;
         use std::thread;
