@@ -4,7 +4,7 @@
 #![cfg_attr(not(any(test, loom)), no_std)]
 #![doc = include_str!("../README.md")]
 
-use core::{cell::UnsafeCell, marker::PhantomData, sync::atomic::Ordering};
+use core::{cell::UnsafeCell, marker::PhantomData, panic::RefUnwindSafe, sync::atomic::Ordering};
 
 #[cfg(loom)]
 use loom::sync::atomic::AtomicPtr;
@@ -432,23 +432,31 @@ fn _compile_fail_tests() {}
 
 unsafe impl<'a, S: Sync> Sync for RefSwap<'a, S> {}
 unsafe impl<'a, S: Sync> Sync for OptionRefSwap<'a, S> {}
+impl<'a, S: RefUnwindSafe> RefUnwindSafe for RefSwap<'a, S> {}
+impl<'a, S: RefUnwindSafe> RefUnwindSafe for OptionRefSwap<'a, S> {}
 
 #[cfg(test)]
 mod tests {
-    #[allow(unused)]
-    fn send_sync() {
-        fn assert_is_send<T: Send>() {}
-        fn assert_is_sync<T: Sync>() {}
-        assert_is_send::<RefSwap<u8>>();
-        assert_is_sync::<RefSwap<u8>>();
-        assert_is_send::<OptionRefSwap<u8>>();
-        assert_is_sync::<OptionRefSwap<u8>>();
-    }
-
+    use core::panic::UnwindSafe;
     #[cfg(miri)]
     use core::sync::atomic::AtomicBool;
 
     use super::*;
+
+    #[allow(unused)]
+    fn send_sync() {
+        fn assert_is_send<T: Send>() {}
+        fn assert_is_sync<T: Sync>() {}
+        fn assert_is_unwindsafe<T: UnwindSafe>() {}
+        assert_is_send::<RefSwap<u8>>();
+        assert_is_sync::<RefSwap<u8>>();
+        assert_is_send::<OptionRefSwap<u8>>();
+        assert_is_sync::<OptionRefSwap<u8>>();
+        assert_is_unwindsafe::<RefSwap<u8>>();
+        assert_is_unwindsafe::<OptionRefSwap<u8>>();
+        assert_is_unwindsafe::<&RefSwap<u8>>();
+        assert_is_unwindsafe::<&OptionRefSwap<u8>>();
+    }
 
     #[allow(unused)]
     fn variance(a: &u32, b: Option<&u32>) {
