@@ -69,13 +69,13 @@ assert!(core::ptr::eq(loaded.unwrap(), &a));
 
 ## License
 
-This project is licensed under the [GNU Lesser General Public License (LGPL)
-version 3][LGPL-3.0].  Configuration files and examples are licensed under the
+This project is licensed under the [Apache-2.0][Apache-2.0] or [MIT][MIT].  Configuration files and examples are licensed under the
 [CC0 1.0 license][CC0-1.0].  For more information, see the license header in
 each file.  You can find a copy of the license texts in the
 [`LICENSES`](./LICENSES) directory.
 
-[LGPL-3.0]: https://opensource.org/licenses/LGPL-3.0
+[Apache-2.0]: https://www.apache.org/licenses/LICENSE-2.0.txt
+[MIT]: https://opensource.org/license/MIT
 [CC0-1.0]: https://creativecommons.org/publicdomain/zero/1.0/
 
 This project complies with [version 3.0 of the REUSE specification][reuse].

@@ -1,3 +1,6 @@
+# Copyright (C) 2023 Nitrokey GmbH
+# SPDX-License-Identifier: CC0-1.0
+
 .PHONY: test
 test:
 	cargo test
