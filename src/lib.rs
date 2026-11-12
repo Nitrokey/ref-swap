@@ -4,7 +4,7 @@
 #![cfg_attr(not(any(test, loom)), no_std)]
 #![doc = include_str!("../README.md")]
 
-use core::{marker::PhantomData, sync::atomic::Ordering};
+use core::{cell::UnsafeCell, marker::PhantomData, sync::atomic::Ordering};
 
 #[cfg(loom)]
 use loom::sync::atomic::AtomicPtr;
@@ -60,7 +60,9 @@ fn load_store(ordering: Ordering) -> Ordering {
 /// A reference that can atomically be changed using another reference with the same lifetime and type
 pub struct RefSwap<'a, T> {
     ptr: AtomicPtr<T>,
-    phantom: PhantomData<&'a T>,
+    // UnsafeCell makes in invariant in 'a. Since the reference value
+    // can be modified through inner mutability, this is required.
+    phantom: PhantomData<UnsafeCell<&'a T>>,
 }
 
 impl<'a, T> RefSwap<'a, T> {
@@ -219,7 +221,9 @@ impl<'a, T> RefSwap<'a, T> {
 /// An optionnal reference that can atomically be changed to another optionnal reference with the same lifetime and type
 pub struct OptionRefSwap<'a, T> {
     ptr: AtomicPtr<T>,
-    phantom: PhantomData<&'a T>,
+    // UnsafeCell makes in invariant in 'a. Since the reference value
+    // can be modified through inner mutability, this is required.
+    phantom: PhantomData<UnsafeCell<&'a T>>,
 }
 
 /// Returns a null pointer if `ptr` is None, otherwise returns the the pointer corresponding to the reference
@@ -411,8 +415,35 @@ impl<'a, T> OptionRefSwap<'a, T> {
     }
 }
 
+/// # Test invariance
+///```rust,compile_fail
+/// use ref_swap::RefSwap;
+/// use std::sync::atomic::Ordering::Relaxed;
+///
+/// let r: RefSwap<'static, String> = RefSwap::new(Box::leak(Box::new(String::from("static"))));
+/// {
+///     let s = String::from("short-lived");
+///     fn shrink<'s>(r: &'s RefSwap<'static, String>) -> &'s RefSwap<'s, String> { r } // compiles
+///     shrink(&r).store(&s, Relaxed);
+/// }
+/// let dangling: &'static String = r.load(Relaxed); // use-after-free
+/// ```
+fn _compile_fail_tests() {}
+
+unsafe impl<'a, S: Sync> Sync for RefSwap<'a, S> {}
+unsafe impl<'a, S: Sync> Sync for OptionRefSwap<'a, S> {}
+
 #[cfg(test)]
 mod tests {
+    #[allow(unused)]
+    fn send_sync() {
+        fn assert_is_send<T: Send>() {}
+        fn assert_is_sync<T: Sync>() {}
+        assert_is_send::<RefSwap<u8>>();
+        assert_is_sync::<RefSwap<u8>>();
+        assert_is_send::<OptionRefSwap<u8>>();
+        assert_is_sync::<OptionRefSwap<u8>>();
+    }
 
     #[cfg(miri)]
     use core::sync::atomic::AtomicBool;
