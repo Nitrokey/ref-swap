@@ -79,6 +79,7 @@ impl<'a, T> RefSwap<'a, T> {
     /// For more information on the orderings, se the documentation of [`AtomicPtr::compare_and_swap`](core::sync::atomic::AtomicPtr::compare_and_swap)
     #[deprecated(note = "Use `compare_exchange` or `compare_exchange_weak` instead")]
     pub fn compare_and_swap(&self, current: &'a T, new: &'a T, order: Ordering) -> &'a T {
+        #[allow(deprecated)]
         let ptr = self
             .ptr
             .compare_exchange(
@@ -241,6 +242,7 @@ impl<'a, T> OptionRefSwap<'a, T> {
         new: Option<&'a T>,
         order: Ordering,
     ) -> Option<&'a T> {
+        #[allow(deprecated)]
         let ptr = self
             .ptr
             .compare_exchange(

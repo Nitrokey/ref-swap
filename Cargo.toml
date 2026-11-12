@@ -17,4 +17,4 @@ readme = "README.md"
 portable-atomic = { version = "1", optional = true }
 
 [features]
-portable-atomic = ["dep:portable-atomic", "portable-atomic/critical-section"]
+portable-atomic = ["dep:portable-atomic"]

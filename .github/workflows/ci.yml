@@ -1,0 +1,17 @@
+# Copyright (C) 2026 Nitrokey GmbH
+# SPDX-License-Identifier: CC0-1.0
+
+name: CI
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        features: ["", "portable-atomic"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test --features "${{ matrix.features }}"
