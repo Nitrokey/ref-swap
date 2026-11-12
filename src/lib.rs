@@ -1,13 +1,16 @@
 // Copyright (C) 2022 Nitrokey GmbH
 // SPDX-License-Identifier: Apache-2.0 or MIT
 
-#![cfg_attr(not(test), no_std)]
+#![cfg_attr(not(any(test, loom)), no_std)]
 #![doc = include_str!("../README.md")]
 
-use core::{
-    marker::PhantomData,
-    sync::atomic::{AtomicPtr, Ordering},
-};
+use core::{cell::UnsafeCell, marker::PhantomData, panic::RefUnwindSafe, sync::atomic::Ordering};
+
+#[cfg(loom)]
+use loom::sync::atomic::AtomicPtr;
+
+#[cfg(not(loom))]
+use core::sync::atomic::AtomicPtr;
 
 /// Relaxed operations can lead to race conditions:
 ///
@@ -57,11 +60,23 @@ fn load_store(ordering: Ordering) -> Ordering {
 /// A reference that can atomically be changed using another reference with the same lifetime and type
 pub struct RefSwap<'a, T> {
     ptr: AtomicPtr<T>,
-    phantom: PhantomData<&'a T>,
+    // UnsafeCell makes in invariant in 'a. Since the reference value
+    // can be modified through inner mutability, this is required.
+    phantom: PhantomData<UnsafeCell<&'a T>>,
 }
 
 impl<'a, T> RefSwap<'a, T> {
+    #[cfg(not(loom))]
     pub const fn new(data: &'a T) -> Self {
+        Self {
+            ptr: AtomicPtr::new(data as *const _ as *mut _),
+            phantom: PhantomData,
+        }
+    }
+
+    // non-const version for loom
+    #[cfg(loom)]
+    pub fn new(data: &'a T) -> Self {
         Self {
             ptr: AtomicPtr::new(data as *const _ as *mut _),
             phantom: PhantomData,
@@ -140,6 +155,7 @@ impl<'a, T> RefSwap<'a, T> {
     /// Get a mutable reference to the current stored reference.
     ///
     /// This is safe because the mutable reference guarantees that no other threads are concurrently accessing the atomic data.
+    #[cfg(not(loom))]
     pub fn get_mut<'s>(&'s mut self) -> &'s mut &'a T {
         let res: &'s mut *mut T = self.ptr.get_mut();
         unsafe { &mut *(res as *mut *mut T as *mut &'a T) }
@@ -148,22 +164,34 @@ impl<'a, T> RefSwap<'a, T> {
     /// Consumes the atomic and returns the contained value.
     ///
     /// This is safe because passing `self` by value guarantees that no other threads are concurrently accessing the atomic data.
+    #[cfg(not(loom))]
     pub fn into_inner(self) -> &'a T {
         let res = self.ptr.into_inner();
         unsafe { &*res }
     }
 
+    /// An alias for [`RefSwap::try_update`]()
+    #[deprecated(note = "renamed to `try_update`for consistency")]
+    pub fn fetch_update<F: FnMut(&'a T) -> Option<&'a T>>(
+        &self,
+        set_order: Ordering,
+        fetch_order: Ordering,
+        f: F,
+    ) -> Result<&'a T, &'a T> {
+        self.try_update(set_order, fetch_order, f)
+    }
+
     /// Fetches the value, and applies a function to it that returns an optional new value. `Returns` a `Result` of `Ok(previous_value)` if the function returned `Some(_)`, else `Err(previous_value)`.
     ///
-    /// For more information on the orderings, se the documentation of [`AtomicPtr::fetch_update`](core::sync::atomic::AtomicPtr::fetch_update)
-    pub fn fetch_update<F: FnMut(&'a T) -> Option<&'a T>>(
+    /// For more information on the orderings, se the documentation of [`AtomicPtr::try_update`](core::sync::atomic::AtomicPtr::try_update)
+    pub fn try_update<F: FnMut(&'a T) -> Option<&'a T>>(
         &self,
         set_order: Ordering,
         fetch_order: Ordering,
         mut f: F,
     ) -> Result<&'a T, &'a T> {
         self.ptr
-            .fetch_update(load_store(set_order), load(fetch_order), |ptr| {
+            .try_update(load_store(set_order), load(fetch_order), |ptr| {
                 f(unsafe { &*ptr }).map(|r| r as *const _ as *mut _)
             })
             .map(|ptr| unsafe { &*ptr })
@@ -193,11 +221,24 @@ impl<'a, T> RefSwap<'a, T> {
 /// An optionnal reference that can atomically be changed to another optionnal reference with the same lifetime and type
 pub struct OptionRefSwap<'a, T> {
     ptr: AtomicPtr<T>,
-    phantom: PhantomData<&'a T>,
+    // UnsafeCell makes in invariant in 'a. Since the reference value
+    // can be modified through inner mutability, this is required.
+    phantom: PhantomData<UnsafeCell<&'a T>>,
 }
 
 /// Returns a null pointer if `ptr` is None, otherwise returns the the pointer corresponding to the reference
+#[cfg(not(loom))]
 const fn opt_to_ptr<T>(ptr: Option<&T>) -> *mut T {
+    match ptr {
+        Some(r) => r as *const _ as *mut _,
+        None => core::ptr::null_mut(),
+    }
+}
+
+// non-const version for loom
+/// Returns a null pointer if `ptr` is None, otherwise returns the the pointer corresponding to the reference
+#[cfg(loom)]
+fn opt_to_ptr<T>(ptr: Option<&T>) -> *mut T {
     match ptr {
         Some(r) => r as *const _ as *mut _,
         None => core::ptr::null_mut(),
@@ -215,7 +256,17 @@ unsafe fn ptr_to_opt<'a, T>(ptr: *mut T) -> Option<&'a T> {
 }
 
 impl<'a, T> OptionRefSwap<'a, T> {
+    #[cfg(not(loom))]
     pub const fn new(data: Option<&'a T>) -> Self {
+        Self {
+            ptr: AtomicPtr::new(opt_to_ptr(data)),
+            phantom: PhantomData,
+        }
+    }
+
+    // Non const version for loom
+    #[cfg(loom)]
+    pub fn new(data: Option<&'a T>) -> Self {
         Self {
             ptr: AtomicPtr::new(opt_to_ptr(data)),
             phantom: PhantomData,
@@ -298,6 +349,7 @@ impl<'a, T> OptionRefSwap<'a, T> {
     ///
     /// This is safe because the mutable reference guarantees that no other threads are concurrently accessing the atomic data.
     #[allow(unused)]
+    #[cfg(not(loom))]
     fn get_mut<'s>(&'s mut self) -> &'s mut Option<&'a T> {
         let res: &'s mut *mut T = self.ptr.get_mut();
 
@@ -309,22 +361,38 @@ impl<'a, T> OptionRefSwap<'a, T> {
     /// Consumes the atomic and returns the contained value.
     ///
     /// This is safe because passing `self` by value guarantees that no other threads are concurrently accessing the atomic data.
-    pub fn into_inner(self) -> &'a T {
+    #[cfg(not(loom))]
+    pub fn into_inner(self) -> Option<&'a T> {
         let res = self.ptr.into_inner();
-        unsafe { &*res }
+        if res.is_null() {
+            None
+        } else {
+            unsafe { Some(&*res) }
+        }
+    }
+
+    /// An alias for [`OptionRefSwap::try_update`]()
+    #[deprecated(note = "renamed to `try_update`for consistency")]
+    pub fn fetch_update<F: FnMut(Option<&'a T>) -> Option<Option<&'a T>>>(
+        &self,
+        set_order: Ordering,
+        fetch_order: Ordering,
+        f: F,
+    ) -> Result<Option<&'a T>, Option<&'a T>> {
+        self.try_update(set_order, fetch_order, f)
     }
 
     /// Fetches the value, and applies a function to it that returns an optional new value. `Returns` a `Result` of `Ok(previous_value)` if the function returned `Some(_)`, else `Err(previous_value)`.
     ///
-    /// For more information on the orderings, se the documentation of [`AtomicPtr::fetch_update`](core::sync::atomic::AtomicPtr::fetch_update)
-    pub fn fetch_update<F: FnMut(Option<&'a T>) -> Option<Option<&'a T>>>(
+    /// For more information on the orderings, se the documentation of [`AtomicPtr::try_update`](core::sync::atomic::AtomicPtr::try_update)
+    pub fn try_update<F: FnMut(Option<&'a T>) -> Option<Option<&'a T>>>(
         &self,
         set_order: Ordering,
         fetch_order: Ordering,
         mut f: F,
     ) -> Result<Option<&'a T>, Option<&'a T>> {
         self.ptr
-            .fetch_update(load_store(set_order), load(fetch_order), |ptr| {
+            .try_update(load_store(set_order), load(fetch_order), |ptr| {
                 f(unsafe { ptr_to_opt(ptr) }).map(opt_to_ptr)
             })
             .map(|ptr| unsafe { ptr_to_opt(ptr) })
@@ -351,12 +419,59 @@ impl<'a, T> OptionRefSwap<'a, T> {
     }
 }
 
+/// # Test invariance
+///```rust,compile_fail
+/// use ref_swap::RefSwap;
+/// use std::sync::atomic::Ordering::Relaxed;
+///
+/// let r: RefSwap<'static, String> = RefSwap::new(Box::leak(Box::new(String::from("static"))));
+/// {
+///     let s = String::from("short-lived");
+///     fn shrink<'s>(r: &'s RefSwap<'static, String>) -> &'s RefSwap<'s, String> { r } // compiles
+///     shrink(&r).store(&s, Relaxed);
+/// }
+/// let dangling: &'static String = r.load(Relaxed); // use-after-free
+/// ```
+///
+/// # Test into_inner without null check
+/// ```rust,compile_fail
+/// use ref_swap::OptionRefSwap;
+///
+/// let r: OptionRefSwap<'static, u32> = OptionRefSwap::new(None);
+/// let x: &u32 = r.into_inner(); // null reference
+/// ```
+fn _compile_fail_tests() {}
+
+unsafe impl<'a, S: Sync> Sync for RefSwap<'a, S> {}
+unsafe impl<'a, S: Sync> Sync for OptionRefSwap<'a, S> {}
+impl<'a, S: RefUnwindSafe> RefUnwindSafe for RefSwap<'a, S> {}
+impl<'a, S: RefUnwindSafe> RefUnwindSafe for OptionRefSwap<'a, S> {}
+
 #[cfg(test)]
 mod tests {
+    use core::panic::UnwindSafe;
+    #[cfg(miri)]
+    use core::sync::atomic::AtomicBool;
+
     use super::*;
 
     #[allow(unused)]
-    fn variance<'a, 'b>(a: &'a u32, b: Option<&'b u32>) {
+    fn send_sync() {
+        fn assert_is_send<T: Send>() {}
+        fn assert_is_sync<T: Sync>() {}
+        fn assert_is_unwindsafe<T: UnwindSafe>() {}
+        assert_is_send::<RefSwap<u8>>();
+        assert_is_sync::<RefSwap<u8>>();
+        assert_is_send::<OptionRefSwap<u8>>();
+        assert_is_sync::<OptionRefSwap<u8>>();
+        assert_is_unwindsafe::<RefSwap<u8>>();
+        assert_is_unwindsafe::<OptionRefSwap<u8>>();
+        assert_is_unwindsafe::<&RefSwap<u8>>();
+        assert_is_unwindsafe::<&OptionRefSwap<u8>>();
+    }
+
+    #[allow(unused)]
+    fn variance(a: &u32, b: Option<&u32>) {
         let r = RefSwap::new(a);
         let stat: &'static u32 = &123;
         r.store(stat, Ordering::Relaxed);
@@ -364,5 +479,49 @@ mod tests {
         let r = OptionRefSwap::new(b);
         let stat: Option<&'static u32> = Some(&123);
         r.store(b, Ordering::Relaxed);
+    }
+
+    // With miri enabled, this tests for the bug described in a5145bc9bc22ae9db310af8a8e5ddab1125d1f4a
+    #[test]
+    #[cfg(miri)]
+    fn miri_test() {
+        use std::sync::atomic::Ordering::Relaxed;
+        use std::thread;
+
+        let previous = AtomicBool::new(false);
+        let next = AtomicBool::new(false);
+
+        for _ in 0..100 {
+            if previous.load(Relaxed) && next.load(Relaxed) {
+                // Both interesting branches have been explored successfully
+                return;
+            }
+
+            let thread_2_value = &mut 1;
+            let init = 0;
+            let r = RefSwap::new(&init);
+            let r = &r;
+            thread::scope(|s| {
+                s.spawn(move || {
+                    *thread_2_value = 2;
+                    r.store(thread_2_value, Relaxed);
+                });
+
+                s.spawn(|| {
+                    match r.load(Relaxed) {
+                        // Undisired branch
+                        0 => previous.store(true, Relaxed),
+                        1 => panic!("Unsynchronised mutation"),
+                        2 => next.store(true, Relaxed),
+                        _ => unreachable!(),
+                    }
+                });
+            });
+        }
+        panic!(
+            "Never got the desired branch: {} {}",
+            previous.load(Relaxed),
+            next.load(Relaxed)
+        );
     }
 }
