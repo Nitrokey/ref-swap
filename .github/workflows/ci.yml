@@ -1,17 +1,26 @@
-# Copyright (C) 2026 Nitrokey GmbH
+# Copyright (C) Nitrokey GmbH
 # SPDX-License-Identifier: CC0-1.0
 
 name: CI
+
 on: [push, pull_request]
-permissions:
-  contents: read
+
 jobs:
-  test:
+  build:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        features: ["", "portable-atomic"]
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - run: cargo test --features "${{ matrix.features }}"
+    - uses: actions/checkout@master
+    - name: Install rust
+      run: |
+        rustup install nightly
+        rustup component add --toolchain nightly miri
+        rustup show
+    - name: Execute checks
+      run: make ci
+
+  portable-atomic:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@master
+    - run: cargo test --features portable-atomic
