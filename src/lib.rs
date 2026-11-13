@@ -6,11 +6,12 @@
 
 use core::{cell::UnsafeCell, marker::PhantomData, panic::RefUnwindSafe, sync::atomic::Ordering};
 
+#[cfg(all(not(loom), not(feature = "portable-atomic")))]
+use core::sync::atomic::AtomicPtr;
 #[cfg(loom)]
 use loom::sync::atomic::AtomicPtr;
-
-#[cfg(not(loom))]
-use core::sync::atomic::AtomicPtr;
+#[cfg(all(not(loom), feature = "portable-atomic"))]
+use portable_atomic::AtomicPtr;
 
 /// Relaxed operations can lead to race conditions:
 ///
@@ -93,11 +94,15 @@ impl<'a, T> RefSwap<'a, T> {
     #[deprecated(note = "Use `compare_exchange` or `compare_exchange_weak` instead")]
     pub fn compare_and_swap(&self, current: &'a T, new: &'a T, order: Ordering) -> &'a T {
         #[allow(deprecated)]
-        let ptr = self.ptr.compare_and_swap(
-            current as *const _ as *mut _,
-            new as *const _ as *mut _,
-            load_store(order),
-        );
+        let ptr = self
+            .ptr
+            .compare_exchange(
+                current as *const _ as *mut _,
+                new as *const _ as *mut _,
+                load_store(order),
+                load(order),
+            )
+            .unwrap_or_else(|previous| previous);
 
         unsafe { &*ptr }
     }
@@ -190,8 +195,9 @@ impl<'a, T> RefSwap<'a, T> {
         fetch_order: Ordering,
         mut f: F,
     ) -> Result<&'a T, &'a T> {
+        #[allow(deprecated)]
         self.ptr
-            .try_update(load_store(set_order), load(fetch_order), |ptr| {
+            .fetch_update(load_store(set_order), load(fetch_order), |ptr| {
                 f(unsafe { &*ptr }).map(|r| r as *const _ as *mut _)
             })
             .map(|ptr| unsafe { &*ptr })
@@ -288,9 +294,15 @@ impl<'a, T> OptionRefSwap<'a, T> {
         order: Ordering,
     ) -> Option<&'a T> {
         #[allow(deprecated)]
-        let ptr =
-            self.ptr
-                .compare_and_swap(opt_to_ptr(current), opt_to_ptr(new), load_store(order));
+        let ptr = self
+            .ptr
+            .compare_exchange(
+                opt_to_ptr(current),
+                opt_to_ptr(new),
+                load_store(order),
+                load(order),
+            )
+            .unwrap_or_else(|previous| previous);
 
         unsafe { ptr_to_opt(ptr) }
     }
@@ -391,8 +403,9 @@ impl<'a, T> OptionRefSwap<'a, T> {
         fetch_order: Ordering,
         mut f: F,
     ) -> Result<Option<&'a T>, Option<&'a T>> {
+        #[allow(deprecated)]
         self.ptr
-            .try_update(load_store(set_order), load(fetch_order), |ptr| {
+            .fetch_update(load_store(set_order), load(fetch_order), |ptr| {
                 f(unsafe { ptr_to_opt(ptr) }).map(opt_to_ptr)
             })
             .map(|ptr| unsafe { ptr_to_opt(ptr) })

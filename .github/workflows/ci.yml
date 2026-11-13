@@ -18,3 +18,9 @@ jobs:
         rustup show
     - name: Execute checks
       run: make ci
+
+  portable-atomic:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@master
+    - run: cargo test --features portable-atomic
