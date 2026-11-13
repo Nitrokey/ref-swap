@@ -1,3 +1,6 @@
+// Copyright (C) 2026 Nitrokey GmbH
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
 #![cfg(loom)]
 
 use loom::thread;
