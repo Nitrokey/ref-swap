@@ -22,7 +22,7 @@ fn load(ordering: Ordering) -> Ordering {
         Ordering::AcqRel => Ordering::AcqRel,
         Ordering::SeqCst => Ordering::SeqCst,
         Ordering::Release => panic!("Release ordering cannot be used for loads"),
-        _ => unimplemented!("{ordering:?} is not supported"),
+        _ => unimplemented!("{:?} is not supported", ordering),
     }
 }
 
@@ -33,7 +33,7 @@ fn store(ordering: Ordering) -> Ordering {
         Ordering::AcqRel => Ordering::AcqRel,
         Ordering::SeqCst => Ordering::SeqCst,
         Ordering::Acquire => panic!("Acquire ordering cannot be used for stores"),
-        _ => unimplemented!("{ordering:?} is not supported"),
+        _ => unimplemented!("{:?} is not supported", ordering),
     }
 }
 
@@ -44,7 +44,7 @@ fn load_store(ordering: Ordering) -> Ordering {
         }
 
         Ordering::SeqCst => Ordering::SeqCst,
-        _ => unimplemented!("{ordering:?} is not supported"),
+        _ => unimplemented!("{:?} is not supported", ordering),
     }
 }
 
@@ -190,8 +190,10 @@ impl<'a, T> RefSwap<'a, T> {
         fetch_order: Ordering,
         mut f: F,
     ) -> Result<&'a T, &'a T> {
+        // Use fetch_update instead of try_update for compatibility with older Rust versions
+        #[allow(deprecated)]
         self.ptr
-            .try_update(load_store(set_order), load(fetch_order), |ptr| {
+            .fetch_update(load_store(set_order), load(fetch_order), |ptr| {
                 f(unsafe { &*ptr }).map(|r| r as *const _ as *mut _)
             })
             .map(|ptr| unsafe { &*ptr })
@@ -391,8 +393,10 @@ impl<'a, T> OptionRefSwap<'a, T> {
         fetch_order: Ordering,
         mut f: F,
     ) -> Result<Option<&'a T>, Option<&'a T>> {
+        // Use fetch_update instead of try_update for compatibility with older Rust versions
+        #[allow(deprecated)]
         self.ptr
-            .try_update(load_store(set_order), load(fetch_order), |ptr| {
+            .fetch_update(load_store(set_order), load(fetch_order), |ptr| {
                 f(unsafe { ptr_to_opt(ptr) }).map(opt_to_ptr)
             })
             .map(|ptr| unsafe { ptr_to_opt(ptr) })

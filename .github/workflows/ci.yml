@@ -34,9 +34,9 @@ jobs:
   msrv:
     runs-on: ubuntu-latest
     env:
-      RUSTUP_TOOLCHAIN: "1.95"
+      RUSTUP_TOOLCHAIN: "1.56"
     steps:
     - uses: actions/checkout@v7
     - run: rustup show active-toolchain || rustup toolchain install
-    - run: make check
-    - run: make test
+    - run: cargo check --all-targets --all-features
+    - run: cargo test
