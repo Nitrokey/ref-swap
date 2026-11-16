@@ -7,8 +7,14 @@ SPDX-License-Identifier: CC0-1.0
 
 ## Unreleased
 
+-
+
+## [v0.1.4][] (2026-11-16)
+
 - Document MSRV 1.56
 - Use `AtomicPtr::fetch_update` instead of `try_update` for compatibility with Rust versions before 1.95
+
+[v0.1.4]: https://github.com/Nitrokey/ref-swap/releases/tag/v0.1.4
 
 ## [v0.1.3][] (2026-11-12)
 
