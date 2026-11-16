@@ -30,3 +30,13 @@ jobs:
         rustup show
     - name: Execute checks
       run: make ci
+
+  msrv:
+    runs-on: ubuntu-latest
+    env:
+      RUSTUP_TOOLCHAIN: "1.95"
+    steps:
+    - uses: actions/checkout@v7
+    - run: rustup show active-toolchain || rustup toolchain install
+    - run: make check
+    - run: make test

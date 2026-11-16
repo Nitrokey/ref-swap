@@ -7,6 +7,8 @@ SPDX-License-Identifier: CC0-1.0
 
 ## Unreleased
 
+- Document MSRV 1.95
+
 ## [v0.1.3][] (2026-11-12)
 
 - Fix variance of `RefSwap` and `OptionRefSwap`.
