@@ -8,6 +8,7 @@ SPDX-License-Identifier: CC0-1.0
 ## Unreleased
 
 - Add optional `portable-atomic` feature
+- Bump MSRV to 1.60
 
 ## [v0.1.4][] (2026-11-16)
 

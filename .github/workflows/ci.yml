@@ -34,7 +34,7 @@ jobs:
   msrv:
     runs-on: ubuntu-latest
     env:
-      RUSTUP_TOOLCHAIN: "1.56"
+      RUSTUP_TOOLCHAIN: "1.60"
     steps:
     - uses: actions/checkout@v7
     - run: rustup show active-toolchain || rustup toolchain install
